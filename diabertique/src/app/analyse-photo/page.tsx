@@ -36,7 +36,11 @@ export default function AnalysePhoto() {
     setShowCamera(true);
     
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true })
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment' // Utilise la caméra arrière (environnement)
+        } 
+      })
         .then(stream => {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
