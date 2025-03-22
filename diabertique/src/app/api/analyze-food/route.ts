@@ -113,7 +113,7 @@ async function analyzeImage(req: NextRequest) {
     try {
       // Appeler l'API OpenAI Vision avec un timeout plus court
       const response = await openai.chat.completions.create({
-        model: "gpt-4-vision-preview", // Modèle qui supporte l'analyse d'images
+        model: "gpt-4o", // Remplacer le modèle déprécié par gpt-4o qui supporte l'analyse d'images
         messages: [
           {
             role: "system",
