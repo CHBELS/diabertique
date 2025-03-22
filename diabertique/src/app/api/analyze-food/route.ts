@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Pour compatibilité avec l'export statique de Capacitor
-export const dynamic = "force-static";
+// Changer de dynamic pour permettre les requêtes API
+export const dynamic = "force-dynamic";
 export const revalidate = false;
 
 // Clé API de secours (à remplacer par la vôtre pour la production)
@@ -40,34 +40,80 @@ const createOpenAIClient = (apiKey: string) => {
   }
 };
 
-// Ajouter la gestion de la méthode OPTIONS pour résoudre l'erreur 405
-export async function OPTIONS() {
-  return NextResponse.json({}, {
+// Améliorer la gestion des CORS pour Vercel
+export async function OPTIONS(req: NextRequest) {
+  // Récupérer l'origine de la requête
+  const origin = req.headers.get('origin') || '*';
+  
+  return new NextResponse(null, {
+    status: 204, // No Content
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      'Access-Control-Max-Age': '86400', // 24 heures
     },
   });
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // Récupérer l'origine de la requête pour CORS
+    const origin = req.headers.get('origin') || '*';
+    
     // Ajouter un timeout pour éviter les problèmes avec les requêtes longues
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Timeout dépassé')), 30000)
     );
 
-    const formData = await req.formData();
+    // Essayer d'extraire le formData
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (error) {
+      console.error("Erreur lors de l'extraction du formData:", error);
+      return NextResponse.json({ 
+        success: false, 
+        error: "Impossible de lire les données du formulaire" 
+      }, { 
+        status: 400,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
+    }
+    
     const imageFile = formData.get('image') as File;
 
     if (!imageFile) {
-      return NextResponse.json({ success: false, error: 'Aucune image fournie' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Aucune image fournie' 
+      }, { 
+        status: 400,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
     }
 
     // Vérifier le type de fichier
     if (!imageFile.type.startsWith('image/')) {
-      return NextResponse.json({ success: false, error: 'Le fichier fourni n\'est pas une image' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Le fichier fourni n\'est pas une image' 
+      }, { 
+        status: 400,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
     }
 
     // Convertir l'image en Buffer
@@ -81,7 +127,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         success: false,
         error: 'Aucune clé API OpenAI disponible. Veuillez configurer une clé API dans les paramètres.'
-      }, { status: 401 });
+      }, { 
+        status: 401,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
     }
     
     // Créer un client OpenAI avec la clé appropriée
@@ -118,7 +171,27 @@ export async function POST(req: NextRequest) {
     });
 
     // Race entre l'API et le timeout
-    const response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
+    let response;
+    try {
+      response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
+    } catch (error) {
+      console.error('Erreur lors de l\'appel à l\'API OpenAI:', error);
+      return NextResponse.json({ 
+        success: false,
+        error: 'Erreur lors de la communication avec l\'API OpenAI',
+        foodItems: ["Erreur de service"],
+        totalCarbs: 0,
+        carbsPerPortion: 0,
+        portionSize: "Inconnue",
+        tips: "Service temporairement indisponible. Veuillez réessayer plus tard."
+      }, {
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
+    }
 
     // Traiter la réponse
     const content = response.choices[0].message.content;
@@ -126,7 +199,7 @@ export async function POST(req: NextRequest) {
 
     try {
       // Essayer de parser la réponse comme JSON
-      if (!content) {
+      if (!content || content.trim() === '') {
         throw new Error('Réponse vide');
       }
       
@@ -164,6 +237,12 @@ export async function POST(req: NextRequest) {
         carbsPerPortion: 0,
         portionSize: "Portion standard",
         tips: "Impossible d'analyser précisément. Consultez un professionnel de santé pour des conseils adaptés."
+      }, {
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
       });
     }
 
@@ -171,17 +250,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       ...analysisResult
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      }
     });
 
   } catch (error: any) {
     console.error('Erreur lors de l\'analyse de l\'image:', error);
     
+    // Récupérer l'origine pour CORS
+    const origin = (error.req && error.req.headers && error.req.headers.get('origin')) || '*';
+    
     // Différencier les erreurs d'API OpenAI
     if (error.message && error.message.includes('API key')) {
       return NextResponse.json({ 
         success: false,
-        error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.'
-      }, { status: 401 });
+        error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.',
+        foodItems: ["Erreur d'authentification"],
+        totalCarbs: 0,
+        carbsPerPortion: 0,
+        portionSize: "Inconnue",
+        tips: "Veuillez vérifier votre clé API dans les paramètres."
+      }, { 
+        status: 401,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
     }
     
     if (error.message && error.message.includes('Timeout')) {
@@ -193,7 +293,14 @@ export async function POST(req: NextRequest) {
         carbsPerPortion: 0,
         portionSize: "Inconnue",
         tips: "Une erreur s'est produite. Veuillez réessayer plus tard."
-      }, { status: 504 });
+      }, { 
+        status: 504,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        }
+      });
     }
     
     // Réponse par défaut en cas d'erreur
@@ -206,6 +313,12 @@ export async function POST(req: NextRequest) {
       carbsPerPortion: 0,
       portionSize: "Inconnue",
       tips: "Une erreur s'est produite. Veuillez réessayer plus tard."
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      }
     });
   }
 } 
