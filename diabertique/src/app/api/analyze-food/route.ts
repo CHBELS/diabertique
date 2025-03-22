@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Changer de dynamic pour permettre les requêtes API
+// Passer en mode dynamique pour les API routes
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
-// Clé API de secours (à remplacer par la vôtre pour la production)
+// Clé API de secours
 const FALLBACK_API_KEY = process.env.OPENAI_API_KEY || "";
 
 // Fonction pour obtenir la clé API OpenAI
@@ -43,13 +43,13 @@ const createOpenAIClient = (apiKey: string) => {
 // Fonction commune pour analyser l'image
 async function analyzeImage(req: NextRequest) {
   try {
-    // Récupérer l'origine de la requête pour CORS
     const origin = req.headers.get('origin') || '*';
-    
-    // Ajouter un timeout pour éviter les problèmes avec les requêtes longues
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout dépassé')), 30000)
-    );
+    const headers = {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+      'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    };
 
     // Essayer d'extraire le formData
     let formData;
@@ -60,14 +60,7 @@ async function analyzeImage(req: NextRequest) {
       return NextResponse.json({ 
         success: false, 
         error: "Impossible de lire les données du formulaire" 
-      }, { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 400, headers });
     }
     
     const imageFile = formData.get('image') as File;
@@ -76,14 +69,7 @@ async function analyzeImage(req: NextRequest) {
       return NextResponse.json({ 
         success: false, 
         error: 'Aucune image fournie' 
-      }, { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 400, headers });
     }
 
     // Vérifier le type de fichier
@@ -91,14 +77,7 @@ async function analyzeImage(req: NextRequest) {
       return NextResponse.json({ 
         success: false, 
         error: 'Le fichier fourni n\'est pas une image' 
-      }, { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 400, headers });
     }
 
     // Convertir l'image en Buffer
@@ -112,219 +91,152 @@ async function analyzeImage(req: NextRequest) {
       return NextResponse.json({ 
         success: false,
         error: 'Aucune clé API OpenAI disponible. Veuillez configurer une clé API dans les paramètres.'
-      }, { 
-        status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 401, headers });
     }
     
     // Créer un client OpenAI avec la clé appropriée
-    const openai = createOpenAIClient(apiKey);
-
-    // Appeler l'API OpenAI Vision avec un timeout
-    const apiPromise = openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Utiliser un modèle plus léger pour éviter les problèmes
-      messages: [
-        {
-          role: "system",
-          content: "Tu es un nutritionniste spécialisé dans le diabète. Analyse les photos de nourriture et estime leur contenu en glucides. Réponds UNIQUEMENT au format JSON avec les clés: foodItems, totalCarbs, carbsPerPortion, portionSize, tips."
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Analyse cette photo de nourriture. Identifie les aliments présents, estime la quantité de glucides (en grammes) dans ce plat, et fournis des conseils pour un diabétique qui voudrait consommer ce plat. Donne ta réponse au format JSON avec les clés suivantes: foodItems (tableau des aliments identifiés), totalCarbs (estimation des glucides totaux en grammes), carbsPerPortion (glucides par portion), portionSize (description de la taille de portion), tips (conseils pour diabétiques)."
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${imageFile.type};base64,${buffer.toString('base64')}`
-              }
-            }
-          ]
-        }
-      ],
-      max_tokens: 500,
-      temperature: 0.5,
-      stream: false, // Important: désactiver le streaming pour éviter les problèmes de parsing JSON
-      response_format: { type: "json_object" }, // Forcer OpenAI à retourner un JSON valide
-    });
-
-    // Race entre l'API et le timeout
-    let response;
+    let openai;
     try {
-      response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
+      openai = createOpenAIClient(apiKey);
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API OpenAI:', error);
-      return NextResponse.json({ 
-        success: false,
-        error: 'Erreur lors de la communication avec l\'API OpenAI',
-        foodItems: ["Erreur de service"],
-        totalCarbs: 0,
-        carbsPerPortion: 0,
-        portionSize: "Inconnue",
-        tips: "Service temporairement indisponible. Veuillez réessayer plus tard."
-      }, {
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
-    }
-
-    // Traiter la réponse
-    const content = response.choices[0].message.content;
-    let analysisResult;
-
-    try {
-      // Essayer de parser la réponse comme JSON
-      if (!content || content.trim() === '') {
-        throw new Error('Réponse vide');
-      }
-      
-      analysisResult = JSON.parse(content);
-      
-      // Vérifier que les propriétés requises sont présentes
-      if (!analysisResult.foodItems || !Array.isArray(analysisResult.foodItems)) {
-        analysisResult.foodItems = ["Aliment non identifié"];
-      }
-      
-      if (typeof analysisResult.totalCarbs !== 'number') {
-        analysisResult.totalCarbs = 0;
-      }
-      
-      if (typeof analysisResult.carbsPerPortion !== 'number') {
-        analysisResult.carbsPerPortion = 0;
-      }
-      
-      if (!analysisResult.portionSize) {
-        analysisResult.portionSize = "Portion standard";
-      }
-      
-      if (!analysisResult.tips) {
-        analysisResult.tips = "Consultez un professionnel de santé pour des conseils adaptés.";
-      }
-      
-    } catch (error) {
-      console.error('Erreur lors du parsing de la réponse JSON:', error, 'Contenu brut:', content);
-      
-      // Créer une réponse formatée manuellement si le parsing échoue
       return NextResponse.json({
-        success: true,
-        foodItems: ["Aliment non identifié"],
-        totalCarbs: 0,
-        carbsPerPortion: 0,
-        portionSize: "Portion standard",
-        tips: "Impossible d'analyser précisément. Consultez un professionnel de santé pour des conseils adaptés."
-      }, {
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
-    }
-
-    // Retourner les résultats d'analyse
-    return NextResponse.json({
-      success: true,
-      ...analysisResult
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-      }
-    });
-
-  } catch (error: any) {
-    console.error('Erreur lors de l\'analyse de l\'image:', error);
-    
-    // Récupérer l'origine pour CORS
-    const origin = (error.req && error.req.headers && error.req.headers.get('origin')) || '*';
-    
-    // Différencier les erreurs d'API OpenAI
-    if (error.message && error.message.includes('API key')) {
-      return NextResponse.json({ 
         success: false,
-        error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.',
-        foodItems: ["Erreur d'authentification"],
+        error: 'Erreur lors de la création du client OpenAI',
+        foodItems: ["Erreur de configuration"],
         totalCarbs: 0,
         carbsPerPortion: 0,
         portionSize: "Inconnue",
         tips: "Veuillez vérifier votre clé API dans les paramètres."
-      }, { 
-        status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 500, headers });
     }
-    
-    if (error.message && error.message.includes('Timeout')) {
+
+    try {
+      // Appeler l'API OpenAI Vision avec un timeout plus court
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo", // Modèle plus léger pour éviter les problèmes
+        messages: [
+          {
+            role: "system",
+            content: "Tu es un nutritionniste spécialisé dans le diabète. Analyse les photos de nourriture et estime leur contenu en glucides. Réponds UNIQUEMENT au format JSON."
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Identifie les aliments présents, estime la quantité de glucides (en grammes) et fournis des conseils pour un diabétique."
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${imageFile.type};base64,${buffer.toString('base64')}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.3,
+        stream: false,
+        response_format: { type: "json_object" },
+      });
+
+      // Traiter la réponse
+      const content = response.choices[0].message.content;
+      
+      if (!content || content.trim() === '') {
+        throw new Error('Réponse vide');
+      }
+      
+      // Parser le JSON
+      const analysisResult = JSON.parse(content);
+      
+      // Vérifier et remplir les champs manquants
+      const result = {
+        foodItems: Array.isArray(analysisResult.foodItems) ? analysisResult.foodItems : ["Aliment non identifié"],
+        totalCarbs: typeof analysisResult.totalCarbs === 'number' ? analysisResult.totalCarbs : 0,
+        carbsPerPortion: typeof analysisResult.carbsPerPortion === 'number' ? analysisResult.carbsPerPortion : 0,
+        portionSize: analysisResult.portionSize || "Portion standard",
+        tips: analysisResult.tips || "Consultez un professionnel de santé pour des conseils adaptés."
+      };
+
+      // Retourner les résultats d'analyse
+      return NextResponse.json({
+        success: true,
+        ...result
+      }, { headers });
+
+    } catch (error: any) {
+      console.error('Erreur OpenAI:', error);
+      
+      // Renvoyer une réponse JSON valide même en cas d'erreur
       return NextResponse.json({ 
         success: false,
-        error: 'La requête a pris trop de temps. Veuillez réessayer.',
-        foodItems: ["Erreur: timeout"],
+        error: error.message || 'Erreur lors de l\'analyse de l\'image',
+        foodItems: ["Erreur d'analyse"],
         totalCarbs: 0,
         carbsPerPortion: 0,
         portionSize: "Inconnue",
         tips: "Une erreur s'est produite. Veuillez réessayer plus tard."
-      }, { 
-        status: 504,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-        }
-      });
+      }, { status: 500, headers });
     }
+  } catch (error: any) {
+    console.error('Erreur globale:', error);
     
-    // Réponse par défaut en cas d'erreur
+    // Récupérer l'origine pour CORS
+    const origin = (error.req && error.req.headers && error.req.headers.get('origin')) || '*';
+    
+    // Renvoyer une réponse JSON valide même en cas d'erreur globale
     return NextResponse.json({ 
       success: false,
-      error: error.message || 'Erreur lors de l\'analyse de l\'image',
-      // Ajouter des données simulées pour éviter le crash de l'application
-      foodItems: ["Erreur d'analyse"],
+      error: error.message || 'Erreur serveur lors de l\'analyse',
+      foodItems: ["Erreur serveur"],
       totalCarbs: 0,
       carbsPerPortion: 0,
       portionSize: "Inconnue",
-      tips: "Une erreur s'est produite. Veuillez réessayer plus tard."
+      tips: "Une erreur s'est produite côté serveur. Veuillez réessayer plus tard."
     }, {
+      status: 500,
       headers: {
         'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
         'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+        'Access-Control-Allow-Credentials': 'true',
       }
     });
   }
 }
 
-// Utiliser des fonctions nommées pour les méthodes HTTP comme recommandé par Next.js
+// Handler OPTIONS pour le preflight CORS
 export async function OPTIONS(req: NextRequest) {
-  // Récupérer l'origine de la requête
-  const origin = req.headers.get('origin') || '*';
-  
   return new NextResponse(null, {
-    status: 204, // No Content
+    status: 204,
     headers: {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Origin': req.headers.get('origin') || '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
       'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-      'Access-Control-Max-Age': '86400', // 24 heures
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
     },
   });
 }
 
-// Exporter une fonction nommée POST (méthode recommandée par Next.js)
+// Handler POST pour l'analyse d'image
 export async function POST(req: NextRequest) {
   return analyzeImage(req);
+}
+
+// Handler GET pour permettre les tests et éviter les erreurs 405
+export async function GET(req: NextRequest) {
+  return NextResponse.json({ 
+    success: true, 
+    message: "Le service d'analyse d'images est disponible. Utilisez une requête POST pour analyser une image." 
+  }, {
+    headers: {
+      'Access-Control-Allow-Origin': req.headers.get('origin') || '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+      'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    }
+  });
 } 

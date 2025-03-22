@@ -96,11 +96,8 @@ export default function AnalysePhoto() {
       const formData = new FormData();
       formData.append('image', blob, 'food-image.jpg');
 
-      // Essayer d'abord avec les paramètres mis à jour pour Vercel
-      // Utilisez une URL absolue pour éviter les problèmes de CORS avec Vercel
-      const baseUrl = typeof window !== 'undefined' 
-        ? `${window.location.protocol}//${window.location.host}`
-        : '';
+      // URL de base de l'application
+      const baseUrl = window.location.origin;
       
       // Appeler l'API d'analyse avec les en-têtes appropriés - utiliser la version synchrone
       const apiResponse = await fetch(`${baseUrl}/api/analyze-food`, {
@@ -110,15 +107,15 @@ export default function AnalysePhoto() {
         }),
         body: formData,
         // Assurer que les cookies sont envoyés avec la requête
-        credentials: 'same-origin'
+        credentials: 'include'
       });
 
       if (!apiResponse.ok) {
         let errorMessage = `Erreur HTTP: ${apiResponse.status}`;
         
         try {
-          const errorData = await apiResponse.json();
-          errorMessage = errorData.error || errorMessage;
+          const errorData = await apiResponse.text();
+          errorMessage = errorData || errorMessage;
         } catch (e) {
           console.error("Impossible de lire la réponse d'erreur", e);
         }
