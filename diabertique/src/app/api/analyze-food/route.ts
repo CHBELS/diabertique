@@ -113,11 +113,11 @@ async function analyzeImage(req: NextRequest) {
     try {
       // Appeler l'API OpenAI Vision avec un timeout plus court
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo", // Modèle plus léger pour éviter les problèmes
+        model: "gpt-4-vision-preview", // Modèle qui supporte l'analyse d'images
         messages: [
           {
             role: "system",
-            content: "Tu es un nutritionniste spécialisé dans le diabète. Analyse les photos de nourriture et estime leur contenu en glucides. Réponds UNIQUEMENT au format JSON."
+            content: "Tu es un nutritionniste spécialisé dans le diabète. Analyse les photos de nourriture et estime leur contenu en glucides. Réponds UNIQUEMENT au format JSON avec les clés: foodItems (liste des aliments identifiés), totalCarbs (total des glucides en grammes), carbsPerPortion (glucides par portion), portionSize (taille de la portion), tips (conseils pour diabétiques)."
           },
           {
             role: "user",
@@ -135,7 +135,7 @@ async function analyzeImage(req: NextRequest) {
             ]
           }
         ],
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.3,
         stream: false,
         response_format: { type: "json_object" },
