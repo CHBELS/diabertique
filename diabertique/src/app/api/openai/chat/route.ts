@@ -42,6 +42,11 @@ const createOpenAIClient = (apiKey: string) => {
 
 export async function POST(req: NextRequest) {
   try {
+    // Ajouter un timeout global pour éviter les problèmes de requête bloquée
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout dépassé')), 25000)
+    );
+
     const { messages } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
@@ -70,16 +75,29 @@ export async function POST(req: NextRequest) {
       rappeler que tes conseils ne remplacent pas l'avis d'un professionnel de santé.`
     };
 
-    // Appeler l'API de complétion de chat avec le modèle GPT-4o
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    // Appeler l'API avec timeout
+    const apiPromise = openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Utiliser un modèle plus léger pour éviter les problèmes
       messages: [systemMessage, ...messages],
       temperature: 0.7,
-      max_tokens: 1000,
-      stream: false, // Désactiver le streaming pour éviter les erreurs JSON
+      max_tokens: 800,
+      stream: false,
     });
 
-    return NextResponse.json({ message: response.choices[0].message.content });
+    // Race entre l'API et le timeout
+    const response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
+    
+    // Si nous sommes ici, c'est que nous avons une réponse valide
+    if (!response || !response.choices || !response.choices[0] || !response.choices[0].message) {
+      throw new Error('Réponse OpenAI invalide');
+    }
+
+    // Renvoyer la réponse
+    return NextResponse.json({
+      message: response.choices[0].message.content,
+      status: 'success'
+    });
+    
   } catch (error: any) {
     console.error('Erreur lors de la conversation avec l\'assistant:', error);
     
@@ -89,7 +107,19 @@ export async function POST(req: NextRequest) {
         error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.'
       }, { status: 401 });
     }
+
+    if (error.message && error.message.includes('Timeout')) {
+      return NextResponse.json({ 
+        error: 'La requête a pris trop de temps. Veuillez réessayer.',
+        details: error.message
+      }, { status: 504 });
+    }
     
-    return NextResponse.json({ error: 'Erreur de communication avec l\'assistant' }, { status: 500 });
+    // Renvoyer une erreur détaillée
+    return NextResponse.json({ 
+      error: 'Erreur de communication avec l\'assistant',
+      details: error.message,
+      status: 'error'
+    }, { status: 500 });
   }
 } 

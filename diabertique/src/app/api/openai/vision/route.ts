@@ -42,6 +42,11 @@ const createOpenAIClient = (apiKey: string) => {
 
 export async function POST(req: NextRequest) {
   try {
+    // Ajouter un timeout global pour éviter les problèmes de requête bloquée
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout dépassé')), 30000)
+    );
+
     const { imageData } = await req.json();
 
     if (!imageData) {
@@ -71,9 +76,9 @@ export async function POST(req: NextRequest) {
     }
     `;
 
-    // Appeler l'API OpenAI Vision avec le modèle GPT-4o
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    // Appeler l'API avec timeout
+    const apiPromise = openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Utiliser un modèle plus léger pour éviter les problèmes
       messages: [
         {
           role: "user",
@@ -89,8 +94,11 @@ export async function POST(req: NextRequest) {
         },
       ],
       max_tokens: 300,
-      stream: false, // Désactiver le streaming pour éviter les erreurs JSON
+      stream: false,
     });
+
+    // Race entre l'API et le timeout
+    const response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
 
     // Extraire et parser la réponse JSON
     const content = response.choices[0].message.content;
@@ -106,25 +114,42 @@ export async function POST(req: NextRequest) {
       } else {
         throw new Error('Format de réponse invalide');
       }
+      
+      // Ajouter un indicateur de succès à la réponse
+      jsonResponse.status = 'success';
+      
+      return NextResponse.json(jsonResponse);
     } catch (error) {
       console.error('Erreur lors du parsing de la réponse JSON:', error);
       return NextResponse.json({ 
         error: 'Impossible de parser la réponse',
-        rawContent: content 
+        rawContent: content,
+        status: 'error'
       }, { status: 500 });
     }
-
-    return NextResponse.json(jsonResponse);
   } catch (error: any) {
     console.error('Erreur lors de l\'analyse de l\'image:', error);
     
     // Différencier les erreurs d'API OpenAI
     if (error.message && error.message.includes('API key')) {
       return NextResponse.json({ 
-        error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.'
+        error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.',
+        status: 'error'
       }, { status: 401 });
     }
+
+    if (error.message && error.message.includes('Timeout')) {
+      return NextResponse.json({ 
+        error: 'La requête a pris trop de temps. Veuillez réessayer.',
+        details: error.message,
+        status: 'error'
+      }, { status: 504 });
+    }
     
-    return NextResponse.json({ error: 'Erreur de traitement de l\'image' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Erreur de traitement de l\'image',
+      details: error.message,
+      status: 'error'  
+    }, { status: 500 });
   }
 } 
