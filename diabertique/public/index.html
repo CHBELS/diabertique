@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#000000">
+  <title>DiabetIA - Assistant pour personnes diabétiques</title>
+  <meta name="description" content="Application d'assistance pour les personnes diabétiques: gestion des repas, analyse des glucides, recettes adaptées et conseils personnalisés">
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #000;
+      color: #fff;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      flex-direction: column;
+    }
+    .loading-logo {
+      width: 100px;
+      height: 100px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #2563eb, #0284c7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+    }
+    .loading-logo svg {
+      width: 60px;
+      height: 60px;
+    }
+    .loading-text {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-top: 16px;
+    }
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(59, 130, 246, 0.2);
+      border-radius: 50%;
+      border-top-color: #3b82f6;
+      animation: spin 1s linear infinite;
+      margin-top: 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="__next">
+    <div class="loading">
+      <div class="loading-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19.5 13.5L12 21l-7.5-7.5a5 5 0 1 1 7-7l5.5 5.5"/>
+          <path d="M3 12h2v3h3M21 12h-2v-3h-3"/>
+        </svg>
+      </div>
+      <div class="loading-text">DiabetIA</div>
+      <div class="loading-spinner"></div>
+    </div>
+  </div>
+</body>
+</html> 

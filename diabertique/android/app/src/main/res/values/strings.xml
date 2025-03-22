@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DiabetIA</string>
+    <string name="title_activity_main">DiabetIA</string>
+    <string name="package_name">com.diabetia.app</string>
+    <string name="custom_url_scheme">com.diabetia.app</string>
+</resources>
