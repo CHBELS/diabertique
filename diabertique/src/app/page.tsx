@@ -169,11 +169,8 @@ export default function Home() {
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            {/* Ligne de connexion sur desktop */}
-            <div className="hidden md:block absolute top-24 left-1/3 right-1/3 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600"></div>
-            
             {/* Étape 1 */}
-            <div className="relative flex flex-col items-center">
+            <div className="relative flex flex-col items-center bg-zinc-900/50 p-6 rounded-2xl hover:bg-zinc-900 transition-all duration-300">
               <div className="relative">
                 <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20"></div>
                 <div className="relative z-10 bg-gradient-to-br from-blue-600 to-blue-700 w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg mb-6">
@@ -188,7 +185,7 @@ export default function Home() {
             </div>
             
             {/* Étape 2 */}
-            <div className="relative flex flex-col items-center">
+            <div className="relative flex flex-col items-center bg-zinc-900/50 p-6 rounded-2xl hover:bg-zinc-900 transition-all duration-300">
               <div className="relative">
                 <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20" style={{ animationDelay: '0.5s' }}></div>
                 <div className="relative z-10 bg-gradient-to-br from-blue-600 to-blue-700 w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg mb-6">
@@ -203,7 +200,7 @@ export default function Home() {
             </div>
             
             {/* Étape 3 */}
-            <div className="relative flex flex-col items-center">
+            <div className="relative flex flex-col items-center bg-zinc-900/50 p-6 rounded-2xl hover:bg-zinc-900 transition-all duration-300">
               <div className="relative">
                 <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20" style={{ animationDelay: '1s' }}></div>
                 <div className="relative z-10 bg-gradient-to-br from-blue-600 to-blue-700 w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg mb-6">
