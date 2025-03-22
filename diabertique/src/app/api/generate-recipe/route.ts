@@ -146,6 +146,7 @@ export async function POST(req: NextRequest) {
         { role: "user", content: prompt }
       ],
       max_tokens: 500,
+      stream: false,
     });
 
     // Extraire et parser la réponse

@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
       messages: [systemMessage, ...messages],
       temperature: 0.7,
       max_tokens: 1000,
+      stream: false, // Désactiver le streaming pour éviter les erreurs JSON
     });
 
     return NextResponse.json({ message: response.choices[0].message.content });

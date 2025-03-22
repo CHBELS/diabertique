@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
         },
       ],
       max_tokens: 300,
+      stream: false, // Désactiver le streaming pour éviter les erreurs JSON
     });
 
     // Extraire et parser la réponse JSON

@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
         }
       ],
       max_tokens: 800,
+      stream: false,
     });
 
     // Traiter la réponse
