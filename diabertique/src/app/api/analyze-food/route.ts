@@ -40,18 +40,34 @@ const createOpenAIClient = (apiKey: string) => {
   }
 };
 
+// Ajouter la gestion de la méthode OPTIONS pour résoudre l'erreur 405
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
+    // Ajouter un timeout pour éviter les problèmes avec les requêtes longues
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout dépassé')), 30000)
+    );
+
     const formData = await req.formData();
     const imageFile = formData.get('image') as File;
 
     if (!imageFile) {
-      return NextResponse.json({ error: 'Aucune image fournie' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Aucune image fournie' }, { status: 400 });
     }
 
     // Vérifier le type de fichier
     if (!imageFile.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Le fichier fourni n\'est pas une image' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Le fichier fourni n\'est pas une image' }, { status: 400 });
     }
 
     // Convertir l'image en Buffer
@@ -71,20 +87,20 @@ export async function POST(req: NextRequest) {
     // Créer un client OpenAI avec la clé appropriée
     const openai = createOpenAIClient(apiKey);
 
-    // Appeler l'API OpenAI Vision
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    // Appeler l'API OpenAI Vision avec un timeout
+    const apiPromise = openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Utiliser un modèle plus léger pour éviter les problèmes
       messages: [
         {
           role: "system",
-          content: "Tu es un nutritionniste spécialisé dans le diabète. Ton rôle est d'analyser les photos de nourriture et d'estimer leur contenu en glucides."
+          content: "Tu es un nutritionniste spécialisé dans le diabète. Analyse les photos de nourriture et estime leur contenu en glucides. Réponds UNIQUEMENT au format JSON avec les clés: foodItems, totalCarbs, carbsPerPortion, portionSize, tips."
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Analyse cette photo de nourriture. Identifie les aliments présents, estime la quantité de glucides (en grammes) dans ce plat, et fournis des conseils pour un diabétique qui voudrait consommer ce plat. Donne ta réponse au format JSON avec les clés suivantes: foodItems (tableau des aliments identifiés), totalCarbs (estimation des glucides totaux en grammes), carbsPerPortion (glucides par portion), portionSize (description de la taille de portion), tips (conseils pour diabétiques). Assure-toi que le JSON soit valide."
+              text: "Analyse cette photo de nourriture. Identifie les aliments présents, estime la quantité de glucides (en grammes) dans ce plat, et fournis des conseils pour un diabétique qui voudrait consommer ce plat. Donne ta réponse au format JSON avec les clés suivantes: foodItems (tableau des aliments identifiés), totalCarbs (estimation des glucides totaux en grammes), carbsPerPortion (glucides par portion), portionSize (description de la taille de portion), tips (conseils pour diabétiques)."
             },
             {
               type: "image_url",
@@ -95,9 +111,14 @@ export async function POST(req: NextRequest) {
           ]
         }
       ],
-      max_tokens: 800,
-      stream: false,
+      max_tokens: 500,
+      temperature: 0.5,
+      stream: false, // Important: désactiver le streaming pour éviter les problèmes de parsing JSON
+      response_format: { type: "json_object" }, // Forcer OpenAI à retourner un JSON valide
     });
+
+    // Race entre l'API et le timeout
+    const response = await Promise.race([apiPromise, timeoutPromise]) as OpenAI.Chat.Completions.ChatCompletion;
 
     // Traiter la réponse
     const content = response.choices[0].message.content;
@@ -105,36 +126,45 @@ export async function POST(req: NextRequest) {
 
     try {
       // Essayer de parser la réponse comme JSON
-      const jsonMatch = content?.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysisResult = JSON.parse(jsonMatch[0]);
-      } else if (content) {
-        analysisResult = JSON.parse(content);
-      } else {
-        throw new Error('Format de réponse invalide');
+      if (!content) {
+        throw new Error('Réponse vide');
       }
+      
+      analysisResult = JSON.parse(content);
+      
+      // Vérifier que les propriétés requises sont présentes
+      if (!analysisResult.foodItems || !Array.isArray(analysisResult.foodItems)) {
+        analysisResult.foodItems = ["Aliment non identifié"];
+      }
+      
+      if (typeof analysisResult.totalCarbs !== 'number') {
+        analysisResult.totalCarbs = 0;
+      }
+      
+      if (typeof analysisResult.carbsPerPortion !== 'number') {
+        analysisResult.carbsPerPortion = 0;
+      }
+      
+      if (!analysisResult.portionSize) {
+        analysisResult.portionSize = "Portion standard";
+      }
+      
+      if (!analysisResult.tips) {
+        analysisResult.tips = "Consultez un professionnel de santé pour des conseils adaptés.";
+      }
+      
     } catch (error) {
-      console.error('Erreur lors du parsing de la réponse JSON:', error);
+      console.error('Erreur lors du parsing de la réponse JSON:', error, 'Contenu brut:', content);
       
       // Créer une réponse formatée manuellement si le parsing échoue
-      if (content) {
-        // Réponse formatée manuellement avec le contenu brut
-        return NextResponse.json({
-          success: true,
-          foodItems: ["Aliment non identifié"],
-          totalCarbs: 0,
-          carbsPerPortion: 0,
-          portionSize: "Portion standard",
-          tips: "Impossible d'analyser précisément. Consultez un professionnel de santé pour des conseils adaptés.",
-          rawContent: content
-        });
-      } else {
-        return NextResponse.json({ 
-          success: false,
-          error: 'Impossible d\'interpréter les résultats de l\'analyse',
-          rawContent: content 
-        });
-      }
+      return NextResponse.json({
+        success: true,
+        foodItems: ["Aliment non identifié"],
+        totalCarbs: 0,
+        carbsPerPortion: 0,
+        portionSize: "Portion standard",
+        tips: "Impossible d'analyser précisément. Consultez un professionnel de santé pour des conseils adaptés."
+      });
     }
 
     // Retourner les résultats d'analyse
@@ -152,6 +182,18 @@ export async function POST(req: NextRequest) {
         success: false,
         error: 'Clé API OpenAI invalide ou expirée. Veuillez vérifier votre clé API dans les paramètres.'
       }, { status: 401 });
+    }
+    
+    if (error.message && error.message.includes('Timeout')) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'La requête a pris trop de temps. Veuillez réessayer.',
+        foodItems: ["Erreur: timeout"],
+        totalCarbs: 0,
+        carbsPerPortion: 0,
+        portionSize: "Inconnue",
+        tips: "Une erreur s'est produite. Veuillez réessayer plus tard."
+      }, { status: 504 });
     }
     
     // Réponse par défaut en cas d'erreur
