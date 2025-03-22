@@ -2,8 +2,8 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuration pour l'export statique en production uniquement
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+  // Supprimer l'export statique pour permettre les API routes dynamiques
+  // output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   
   // Désactiver la génération des routes dynamiques pour les pages avec [paramètres]
   // Cela permet de créer une page générique qui sera utilisée pour tous les IDs
