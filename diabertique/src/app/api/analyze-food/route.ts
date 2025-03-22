@@ -40,23 +40,8 @@ const createOpenAIClient = (apiKey: string) => {
   }
 };
 
-// Améliorer la gestion des CORS pour Vercel
-export async function OPTIONS(req: NextRequest) {
-  // Récupérer l'origine de la requête
-  const origin = req.headers.get('origin') || '*';
-  
-  return new NextResponse(null, {
-    status: 204, // No Content
-    headers: {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
-      'Access-Control-Max-Age': '86400', // 24 heures
-    },
-  });
-}
-
-export async function POST(req: NextRequest) {
+// Fonction commune pour analyser l'image
+async function analyzeImage(req: NextRequest) {
   try {
     // Récupérer l'origine de la requête pour CORS
     const origin = req.headers.get('origin') || '*';
@@ -321,4 +306,25 @@ export async function POST(req: NextRequest) {
       }
     });
   }
+}
+
+// Utiliser des fonctions nommées pour les méthodes HTTP comme recommandé par Next.js
+export async function OPTIONS(req: NextRequest) {
+  // Récupérer l'origine de la requête
+  const origin = req.headers.get('origin') || '*';
+  
+  return new NextResponse(null, {
+    status: 204, // No Content
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-OpenAI-API-Key, Authorization',
+      'Access-Control-Max-Age': '86400', // 24 heures
+    },
+  });
+}
+
+// Exporter une fonction nommée POST (méthode recommandée par Next.js)
+export async function POST(req: NextRequest) {
+  return analyzeImage(req);
 } 

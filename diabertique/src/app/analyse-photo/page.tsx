@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { CameraIcon, ArrowUpTrayIcon, XMarkIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { saveUserRecord } from '@/utils/storage';
 import { EnhancedFoodAnalysis } from '@/types';
-import { addApiKeyToHeaders } from '@/components/ApiKeyManager';
+import { addApiKeyToHeaders, addApiKeyToHeadersSync } from '@/components/ApiKeyManager';
 
 export default function AnalysePhoto() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -96,19 +96,43 @@ export default function AnalysePhoto() {
       const formData = new FormData();
       formData.append('image', blob, 'food-image.jpg');
 
-      // Appeler l'API d'analyse avec les en-têtes appropriés
-      const apiResponse = await fetch('/api/analyze-food', {
+      // Essayer d'abord avec les paramètres mis à jour pour Vercel
+      // Utilisez une URL absolue pour éviter les problèmes de CORS avec Vercel
+      const baseUrl = typeof window !== 'undefined' 
+        ? `${window.location.protocol}//${window.location.host}`
+        : '';
+      
+      // Appeler l'API d'analyse avec les en-têtes appropriés - utiliser la version synchrone
+      const apiResponse = await fetch(`${baseUrl}/api/analyze-food`, {
         method: 'POST',
-        headers: addApiKeyToHeaders(),
-        body: formData
+        headers: addApiKeyToHeadersSync({
+          // Ne pas définir Content-Type ici car le navigateur le fait automatiquement avec le boundary pour FormData
+        }),
+        body: formData,
+        // Assurer que les cookies sont envoyés avec la requête
+        credentials: 'same-origin'
       });
 
       if (!apiResponse.ok) {
-        const errorData = await apiResponse.json();
-        throw new Error(errorData.error || 'Erreur lors de l\'analyse de l\'image');
+        let errorMessage = `Erreur HTTP: ${apiResponse.status}`;
+        
+        try {
+          const errorData = await apiResponse.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error("Impossible de lire la réponse d'erreur", e);
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      const data = await apiResponse.json();
+      // Vérifier que la réponse contient du contenu
+      const text = await apiResponse.text();
+      if (!text || text.trim() === '') {
+        throw new Error('Réponse vide du serveur');
+      }
+
+      const data = JSON.parse(text);
       
       if (!data.success) {
         throw new Error(data.error || 'Erreur lors de l\'analyse de l\'image');
